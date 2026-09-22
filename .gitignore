@@ -1,0 +1,15 @@
+__pycache__/
+.vscode/
+# audio
+*.mp3
+# checkpoints
+*.pt
+# compressed files
+*.zip
+*.tar.gz
+
+data/
+checkpoints/
+not_in_use/
+
+not_used_*.py

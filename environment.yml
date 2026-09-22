@@ -1,0 +1,29 @@
+name: muenv
+channels:
+  - https://repo.anaconda.com/pkgs/main
+  - https://repo.anaconda.com/pkgs/r
+dependencies:
+  - python=3.12
+
+  # numerical / data
+  - numpy
+  - scipy
+  - pandas
+
+  # audio
+  - librosa
+  - pydub
+  - ffmpeg
+
+  # ML
+  - pytorch
+  - pytorch-cuda=11.8
+
+  # metrics
+  - scikit-learn
+
+  # utilities
+  - tqdm
+
+  # visualization
+  - matplotlib
