@@ -176,7 +176,7 @@ class PNDATACOSDataset(Dataset):
         if self.split == "train":
             fs_input = da.shift_pitch_hpcp(fs_input)
             fs_input = da.shift_mask_hpcp_time(fs_input)
-            fs_input = da.partial_hpcp(fs_input)
+            fs_input = da.partial_gap_hpcp(fs_input)
             # fs_input = da.splice_same_song_hpcp(fs_input, p=0.2, seg_len=500)
 
             # fp_input = da.augment_hpcp(fp_input)

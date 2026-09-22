@@ -45,6 +45,36 @@ def partial_hpcp(x, p=1.0, min_ratio=0.25, max_ratio=0.5):
         return x
     
 
+def partial_gap_hpcp(x, p=1.0, min_ratio=0.25, max_ratio=0.5, min_chunk=50, max_chunk=200, min_gap=20, max_gap=150):
+    if torch.rand(1).item() < p:
+        T = x.shape[-1]
+
+        keep_len = int(torch.empty(1).uniform_(min_ratio, max_ratio).item() * T)
+
+        out = torch.zeros_like(x)
+
+        remaining = keep_len
+        pos = torch.randint(0, max(1, min_gap + 1), (1,)).item()
+
+        while remaining > 0 and pos < T:
+            chunk_len = torch.randint(min_chunk, max_chunk + 1, (1,)).item()
+            chunk_len = min(chunk_len, remaining, T - pos)
+
+            if chunk_len <= 0:
+                break
+
+            out[..., pos:pos + chunk_len] = x[..., pos:pos + chunk_len]
+
+            remaining -= chunk_len
+
+            gap = torch.randint(min_gap, max_gap + 1, (1,)).item()
+            pos += chunk_len + gap
+
+        return out
+
+    return x
+    
+
 def cut_hpcp(x, p=1.0, ratio=0.25):
     if torch.rand(1).item() < p:
         T = x.shape[-1]
