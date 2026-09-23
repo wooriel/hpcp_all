@@ -13,7 +13,7 @@ from data_augmentation import cyclic_subset
 parser = argparse.ArgumentParser()
 parser.add_argument("--data_dir", type=str, default="da_tacos", help="data directory name")
 parser.add_argument("--csv_pref", type=str, default="pair")
-parser.add_argument("--exp_name", type=str, default="moco_attn_v6", help="name of training experiment")
+parser.add_argument("--exp_name", type=str, default="moco_attn_v7", help="name of training experiment")
 parser.add_argument("--csv_dir", type=str, default="da-tacos_metadata", help="directory of metadata")
 # parser.add_argument("--split", type=str, default="train")
 parser.add_argument("--cache_dir", type=str, default="hpcp_cache", help="cache directory name")

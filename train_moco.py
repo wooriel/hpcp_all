@@ -13,7 +13,7 @@ def train_vit_moco_one_epoch(model, dataloader, optimizer, device):
     total_loss = 0.0
     total_samples = 0
 
-    lambda_moco = 1.0
+    lambda_moco = 0.5
     lambda_local = 0.3
     lambda_ap = 1.0
 

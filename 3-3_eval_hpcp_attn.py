@@ -12,7 +12,7 @@ from checkpoint import load_checkpoint
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--csv_pref", type=str, default="pair")
-parser.add_argument("--exp_name", type=str, default="hpcp_attn_v6", help="name of training experiment")
+parser.add_argument("--exp_name", type=str, default="hpcp_attn_v7", help="name of training experiment")
 parser.add_argument("--cache_dir", type=str, default="cache", help="cache directory name")
 parser.add_argument("--rep", type=str, default="hpcp", help="representation of the input")
 args = parser.parse_args()
