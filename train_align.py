@@ -96,8 +96,8 @@ def train_vit_align_one_epoch(model, dataloader, optimizer, device, glo_margin=0
         ap_loss = smooth_ap_loss(embeddings, work_ids, temperature=0.1)
         global_loss = (lambda_tri * tri_loss + lambda_ap * ap_loss)
 
-        pos_local_score, _, _ = best_diagonal_window(pos_sim, window=40)
-        neg_local_score, _, _ = best_diagonal_window(neg_sim, window=40)
+        pos_local_score, _, _ = best_diagonal_window(pos_sim, window=8)
+        neg_local_score, _, _ = best_diagonal_window(neg_sim, window=8)
         local_loss = F.relu(neg_local_score - pos_local_score + loc_margin).mean()
 
         loss = (global_loss + lambda_local * local_loss)

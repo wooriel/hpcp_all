@@ -175,6 +175,7 @@ class PNDATACOSDataset(Dataset):
         # augmentation during training
         if self.split == "train":
             fs_input = da.shift_pitch_hpcp(fs_input)
+            fs_input = da.mirror_pitch_axis(fs_input)
             fs_input = da.shift_mask_hpcp_time(fs_input)
             fs_input = da.partial_gap_hpcp(fs_input)
             # fs_input = da.splice_same_song_hpcp(fs_input, p=0.2, seg_len=500)
@@ -184,7 +185,10 @@ class PNDATACOSDataset(Dataset):
 
             # fn_input = da.augment_hpcp(fn_input)
             # fn_input = da.splice_same_song_hpcp(fn_input, p=0.2, seg_len=500)
-
+        else:
+            fs_input = da.mirror_pitch_axis(fs_input)
+        fp_input = da.mirror_pitch_axis(fp_input)
+        fn_input = da.mirror_pitch_axis(fn_input)
         tfs_input = torch.as_tensor(fs_input, dtype=torch.float32).unsqueeze(0)
         tfp_input = torch.as_tensor(fp_input, dtype=torch.float32).unsqueeze(0)
         tfn_input = torch.as_tensor(fn_input, dtype=torch.float32).unsqueeze(0)

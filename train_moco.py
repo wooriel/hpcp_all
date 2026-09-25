@@ -88,8 +88,8 @@ def train_vit_moco_one_epoch(model, dataloader, optimizer, device):
             output["x1_local_feature"],
             neg_local
         )
-        pos_local_score, _, _ = best_diagonal_window(pos_sim, window=40)
-        neg_local_score, _, _ = best_diagonal_window(neg_sim, window=40)
+        pos_local_score, _, _ = best_diagonal_window(pos_sim, window=8)
+        neg_local_score, _, _ = best_diagonal_window(neg_sim, window=8)
         local_loss = F.relu(neg_local_score - pos_local_score + 0.2).mean()
 
         loss = lambda_moco * moco_loss + lambda_local * local_loss + lambda_ap * ap_loss

@@ -282,11 +282,13 @@ class LGSelfAttentionModel(nn.Module): # used for HPCP
     
 
 class HPCPSelfAttentionModel(nn.Module): # used for HPCP
-    def __init__(self, tokenizer, self_attention, nhead, d_model=64):
+    def __init__(self, tokenizer, self_attention, nhead, num_token=175, d_model=64):
         super().__init__()
         self.dim = d_model
         self.head = nhead
+        self.num_token = num_token
         self.tokenizer = tokenizer
+        self.pos_embed = nn.Parameter(torch.zeros(1, self.num_token, self.dim))
         self.self_attention = self_attention
 
         self.pair_projection = PairProjection(d_model=self.dim, pair_dim=self.dim)
@@ -296,6 +298,7 @@ class HPCPSelfAttentionModel(nn.Module): # used for HPCP
     def encode_tokens(self, x):
         B = x.shape[0]
         x = self.tokenizer(x)
+        x = x + self.pos_embed[:, :x.shape[1], :]
         x = self.self_attention(x) # [B, N, D]
 
         # x = x.reshape(B, self.head, x.shape[1], self.dim) # [B*H, N, D]
@@ -322,6 +325,8 @@ class HPCPSelfAttentionModel(nn.Module): # used for HPCP
         return x
 
     def forward(self, src, tgt):
+        
+
         src_token = self.encode_tokens(src)
         tgt_token = self.encode_tokens(tgt)
 

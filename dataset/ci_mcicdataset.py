@@ -167,6 +167,8 @@ class MCICDataset(Dataset):
 
         src_feature, tgt_feature = self.get_feature(src_path, src_cid), self.get_feature(tgt_path, tgt_cid)
         fs_input, ft_input = self.test_crop_1(src_feature), self.test_crop_1(tgt_feature) # numpy-fixed source / target
+        fs_input = da.mirror_pitch_axis(fs_input)
+        ft_input = da.mirror_pitch_axis(ft_input)
         tfs_input, tft_input = torch.as_tensor(fs_input, dtype=torch.float32), torch.as_tensor(ft_input, dtype=torch.float32)
         tfs_input = tfs_input.unsqueeze(0)
         if self.crop:

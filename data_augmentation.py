@@ -1,5 +1,28 @@
 import torch
 
+def mirror_pitch_axis(x):
+    """
+    Mirror the y-axis and stack it after the original.
+
+    Example:
+        C D E F G A B
+        ->
+        C D E F G A B C B A G F E D C
+
+    Args:
+        x: input tensor
+        y_dim: dimension corresponding to the pitch/y-axis
+
+    Returns:
+        Tensor with the y-axis extended in both directions.
+    """
+    assert x.ndim == 2
+    assert x.shape[0] == 12
+    # Reverse entire pitch axis: Si La ... Re Do
+    x_reverse = torch.flip(x[:-1, :], dims=[0])
+
+    return torch.cat([x, x_reverse], dim=0)
+
 
 def shift_pitch_hpcp(x, p=1.0, max_pitch_shift=6):
     if torch.rand(1).item() < p:

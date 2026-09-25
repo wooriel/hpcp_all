@@ -195,7 +195,10 @@ class SHSDataset(Dataset):
         fs_input = self.test_crop_1(src_feature)
         ft_input = self.test_crop_1(tgt_feature)
         fn_input = self.test_crop_1(neg_tgt_feature)
-
+        
+        fs_input = da.mirror_pitch_axis(fs_input)
+        ft_input = da.mirror_pitch_axis(ft_input)
+        fn_input = da.mirror_pitch_axis(fn_input)
         # data augmentation on source only
         # fs_input = da.shift_pitch_cqt(fs_input)
         # fs_input = da.shift_mask_cqt_time(fs_input)

@@ -13,7 +13,7 @@ from data_augmentation import cyclic_subset
 parser = argparse.ArgumentParser()
 parser.add_argument("--data_dir", type=str, default="da_tacos", help="data directory name")
 parser.add_argument("--csv_pref", type=str, default="pair")
-parser.add_argument("--exp_name", type=str, default="moco_attn_v7", help="name of training experiment")
+parser.add_argument("--exp_name", type=str, default="moco_attn_v9", help="name of training experiment")
 parser.add_argument("--csv_dir", type=str, default="da-tacos_metadata", help="directory of metadata")
 # parser.add_argument("--split", type=str, default="train")
 parser.add_argument("--cache_dir", type=str, default="hpcp_cache", help="cache directory name")
@@ -42,9 +42,9 @@ datacos_val_loader = DataLoader(datacos_val_dataset, batch_size=256, shuffle=Fal
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 # model
-tokenizer = a_vittokenizer.RawTokenizer()
+tokenizer = a_vittokenizer.RawTokenizer(d_model=64, patch_h=23, patch_w=25)
 selfattn = b_selfattention.SelfAttentionEncoder(nhead=8, d_model=64, num_layers=2, dim_feedforward=256, dropout=0.1)
-encoder = d_projector.HPCPSelfAttentionEncoder(tokenizer=tokenizer, self_attention=selfattn, nhead=8, d_model=64)
+encoder = d_projector.HPCPSelfAttentionEncoder(tokenizer=tokenizer, self_attention=selfattn, num_tokens=175, nhead=8, d_model=64)
 model = d_projector.HPCPMoCo(encoder, proj_dim=128, proj_hidden=256, momentum=0.99, temperature=0.2).to(device=device)
 
 optimizer = torch.optim.AdamW(
@@ -79,6 +79,10 @@ if checkpoint_path.is_file():
 else:
     print("No checkpoint found. Starting from epoch 1.")
 
+sample = datacos_train_dataset[0]
+for k, v in sample.items():
+    if hasattr(v, "shape"):
+        print(k, v.shape)
 
 for epoch in range(start_epoch, num_epochs + 1):
     # cyclic_train_dataset = cyclic_subset(datacos_train_dataset, epoch=epoch, ratio=0.2)

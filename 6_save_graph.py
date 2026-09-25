@@ -6,7 +6,7 @@ from graph import parse_train_log, plot_metric_trend, parse_eval_log, plot_eval_
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--check_dir", type=str, default="checkpoints", help="checkpoint directory name")
-parser.add_argument("--exp_name", type=str, default="moco_attn_v7", help="name of training experiment") # moco_attn_v4 hpcp_attn_v3
+parser.add_argument("--exp_name", type=str, default="moco_attn_v9", help="name of training experiment") # moco_attn_v4 hpcp_attn_v3
 parser.add_argument("--log_type", type=str, default="eval", help="one between train and eval")
 parser.add_argument("--save_dir", type=str, default="save", help="name of saving directory name")
 args = parser.parse_args()

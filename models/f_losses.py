@@ -356,7 +356,7 @@ def diagonal_local_score(src_tokens, tgt_tokens, window=8):
 #     )
 
 
-def best_diagonal_window(sim, window=40, return_indices=False):
+def best_diagonal_window(sim, window=8, return_indices=False):
     B, N, M= sim.shape
     if window > N or window > M:
         raise ValueError(f"window={window} > N={N} or M={M}")

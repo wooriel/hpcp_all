@@ -111,7 +111,7 @@ class HPCPViTTokenizer(nn.Module):
     
 
 class RawTokenizer(nn.Module):
-    def __init__(self, d_model=64, patch_h=12, patch_w=25):
+    def __init__(self, d_model=64, patch_h=23, patch_w=25):
         super().__init__()
 
         self.patch_h = patch_h
@@ -121,18 +121,18 @@ class RawTokenizer(nn.Module):
         self.proj = nn.Linear(patch_dim, d_model)
 
     def forward(self, x):
-        B, C, H, W = x.shape # x: [B, 1, 96, 4375]
+        B, C, H, W = x.shape # x: [B, 1, 23, 4375]
 
         usable_h = (H // self.patch_h) * self.patch_h # patch_h로 나눠지는 길이
         usable_w = (W // self.patch_w) * self.patch_w # patch_w로 나눠지는 길이
 
-        x = x[:, :, :usable_h, :usable_w] # x: [B, 1, 96, 4375]
+        x = x[:, :, :usable_h, :usable_w] # x: [B, 1, 23, 4375]
 
         x = x.unfold(2, self.patch_h, self.patch_h)
-        x = x.unfold(3, self.patch_w, self.patch_w) # [B, 1, 8, 12, 175, 25]
+        x = x.unfold(3, self.patch_w, self.patch_w) # [B, 1, 1, 23, 175, 25]
 
-        x = x.permute(0, 2, 3, 1, 4, 5) # [B, 8, 175, 1, 12, 25] = [B, H_patch, W_patch, C, patch_h, patch_w]
-        x = x.reshape(B, -1, C * self.patch_h * self.patch_w) # [B, 8*175, 300]
+        x = x.permute(0, 2, 3, 1, 4, 5) # [B, 1, 175, 1, 23, 25] = [B, H_patch, W_patch, C, patch_h, patch_w]
+        x = x.reshape(B, -1, C * self.patch_h * self.patch_w) # [B, 1*175, 575]
         x = self.proj(x) # [B, N, d_model]
 
         return x

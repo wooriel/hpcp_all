@@ -128,17 +128,19 @@ class PredictionMLP(nn.Module):
 
 
 class HPCPSelfAttentionEncoder(nn.Module):
-    def __init__(self, tokenizer, self_attention, nhead, d_model=64):
+    def __init__(self, tokenizer, self_attention, nhead, num_tokens=175, d_model=64):
         super().__init__()
 
         self.dim = d_model
         self.head = nhead
         self.tokenizer = tokenizer
+        self.pos = nn.Parameter(torch.zeros(1, num_tokens, self.dim))
         self.self_attention = self_attention
         self.pair_projection = PairProjection(d_model=d_model, pair_dim=d_model)
 
     def encode_tokens(self, x):  # [B, 1, 96, 4375]
         x = self.tokenizer(x)  # [B, N, D]
+        x = x + self.pos[:, :x.shape[1], :]
         x = self.self_attention(x)  # [B, N, D]
 
         return x

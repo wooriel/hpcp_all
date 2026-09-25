@@ -11,7 +11,7 @@ from checkpoint import load_checkpoint
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--csv_pref", type=str, default="pair")
-parser.add_argument("--exp_name", type=str, default="moco_attn_v7", help="name of training experiment")
+parser.add_argument("--exp_name", type=str, default="moco_attn_v9", help="name of training experiment")
 parser.add_argument("--cache_dir", type=str, default="cache", help="cache directory name")
 parser.add_argument("--rep", type=str, default="hpcp", help="representation of the input")
 args = parser.parse_args()
@@ -59,7 +59,7 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 # model
 tokenizer = a_vittokenizer.RawTokenizer()
 selfattn = b_selfattention.SelfAttentionEncoder(nhead=8, d_model=64, num_layers=2, dim_feedforward=256, dropout=0.1)
-encoder = d_projector.HPCPSelfAttentionEncoder(tokenizer=tokenizer, self_attention=selfattn, nhead=8, d_model=64)
+encoder = d_projector.HPCPSelfAttentionEncoder(tokenizer=tokenizer, self_attention=selfattn, num_tokens=175, nhead=8, d_model=64)
 model = d_projector.HPCPMoCo(encoder, proj_dim=128, proj_hidden=256, momentum=0.99, temperature=0.2).to(device=device)
 
 optimizer = torch.optim.AdamW(
@@ -74,7 +74,7 @@ best_loss = float("inf")
 
 # checkpoint_path = checkpoint_dir / "last.pt"
 # checkpoint_path = checkpoint_dir / "best.pt"
-checkpoint_path = checkpoint_dir / "model_epoch_050.pt"
+checkpoint_path = checkpoint_dir / "model_epoch_005.pt"
 
 
 if checkpoint_path.is_file():
@@ -88,6 +88,11 @@ if checkpoint_path.is_file():
         best_loss = loaded_loss
 else:
     print("No checkpoint found. Starting from epoch 1.")
+
+shs_sample = shs_test_dataset[0]
+for k, v in shs_sample.items():
+    if hasattr(v, "shape"):
+        print(k, v.shape)
 
 # Evaluation on shs-100K test dataset pair
 shs_test_metrics = evaluate_vit_moco_pn(

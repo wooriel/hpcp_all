@@ -5,6 +5,7 @@ import torch
 from torch.utils.data import Dataset, DataLoader
 import torch.nn.functional as F
 import audio_conv as ac
+import data_augmentation as da
 
 
 class Cover80Dataset(Dataset):
@@ -182,6 +183,10 @@ class Cover80Dataset(Dataset):
         fs_input = self.test_crop_1(src_feature)
         fp_input = self.test_crop_1(pos_feature)
         fn_input = self.test_crop_1(neg_feature)
+
+        fs_input = da.mirror_pitch_axis(fs_input)
+        fp_input = da.mirror_pitch_axis(fp_input)
+        fn_input = da.mirror_pitch_axis(fn_input)
 
         tfs_input = torch.as_tensor(fs_input, dtype=torch.float32).unsqueeze(0)
         tfp_input = torch.as_tensor(fp_input, dtype=torch.float32).unsqueeze(0)
