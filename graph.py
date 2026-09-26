@@ -197,3 +197,156 @@ def plot_eval_metric_by_dataset(records, metric, save_dir="eval_plots"):
         save_path = save_dir / f"{dataset}_{metric}.png"
         plt.savefig(save_path, dpi=300)
         plt.close()
+
+
+def parse_ci_eval_log(log_path, start_epoch=5, epoch_step=5):
+    rows = []
+
+    with open(log_path, "r") as f:
+        lines = [line.strip() for line in f if line.strip()]
+
+    for i, line in enumerate(lines):
+        # every 2 lines correspond to one epoch
+        epoch = start_epoch + (i // 2) * epoch_step
+
+        parts = [p.strip() for p in line.split("|")]
+
+        dataset = parts[0]
+
+        row = {
+            "epoch": epoch,
+            "dataset": dataset,
+        }
+
+        for part in parts[1:]:
+            key, value = part.split(":", 1)
+
+            key = key.strip().lower()
+            value = float(value.strip())
+
+            key_map = {
+                "pos": "positive_cosine_mean",
+                "neg": "negative_cosine_mean",
+                "gap": "cosine_gap",
+                "pos std": "positive_cosine_std",
+                "neg std": "negative_cosine_std",
+                "auc": "auc",
+                "threshold": "threshold",
+                "acc": "accuracy",
+                "prec": "precision",
+                "recall": "recall",
+                "f1": "f1",
+                "tp": "tp",
+                "fp": "fp",
+                "tn": "tn",
+                "fn": "fn",
+            }
+
+            row[key_map.get(key, key)] = value
+
+        rows.append(row)
+
+    return pd.DataFrame(rows)
+
+
+def plot_ci_metric_by_dataset(df, metric, save_dir="ci_eval_plots"):
+    save_dir = Path(save_dir)
+    save_dir.mkdir(parents=True, exist_ok=True)
+
+    datasets = sorted(df["dataset"].unique())
+
+    for dataset in datasets:
+        dataset_df = df[df["dataset"] == dataset].copy()
+
+        if metric not in dataset_df.columns:
+            continue
+
+        dataset_df = dataset_df.sort_values("epoch")
+
+        epochs = dataset_df["epoch"].tolist()
+        values = dataset_df[metric].tolist()
+
+        plt.figure(figsize=(6, 6))
+        plt.plot(epochs, values, marker="o", markersize=3)
+
+        plt.xlabel("Epoch")
+        plt.ylabel(metric.replace("_", " ").title())
+        plt.title(f"{dataset} - {metric.replace('_', ' ').title()}")
+
+        plt.xticks(epochs)
+        plt.grid(True, alpha=0.2)
+        plt.tight_layout()
+
+        save_path = save_dir / f"{dataset}_ci_{metric}.png"
+        plt.savefig(save_path, dpi=300)
+        plt.close()
+
+
+# this plots all ci metric at once
+def plot_all_ci_metrics_by_dataset(
+    df,
+    metrics=None,
+    save_dir="ci_eval_plots",
+):
+    if metrics is None:
+        metrics = [
+            "auc",
+            "threshold",
+            "accuracy",
+            "precision",
+            "recall",
+            "f1",
+        ]
+
+    save_dir = Path(save_dir)
+    save_dir.mkdir(parents=True, exist_ok=True)
+
+    datasets = sorted(df["dataset"].unique())
+
+    for dataset in datasets:
+        dataset_df = (
+            df[df["dataset"] == dataset]
+            .copy()
+            .sort_values("epoch")
+        )
+
+        if len(dataset_df) == 0:
+            continue
+
+        epochs = dataset_df["epoch"].tolist()
+
+        plt.figure(figsize=(8, 6))
+
+        for metric in metrics:
+            if metric not in dataset_df.columns:
+                continue
+
+            values = dataset_df[metric].tolist()
+
+            plt.plot(
+                epochs,
+                values,
+                marker="o",
+                markersize=3,
+                label=metric.upper(),
+            )
+
+        plt.xlabel("Epoch")
+        plt.ylabel("Score")
+        plt.title(f"{dataset} - CI Metrics")
+
+        plt.xticks(epochs)
+        plt.ylim(0, 1)
+
+        plt.grid(True, alpha=0.2)
+        plt.legend()
+        plt.tight_layout()
+
+        save_path = save_dir / f"{dataset}_ci_metrics.png"
+
+        plt.savefig(
+            save_path,
+            dpi=300,
+        )
+
+        plt.close()
