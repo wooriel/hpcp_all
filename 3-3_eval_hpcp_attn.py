@@ -6,7 +6,7 @@ from dataset import cs_cover80dataset, cs_shsdataset, ci_copyright40dataset, ci_
 from torch.utils.data import DataLoader
 from models import a_vittokenizer, b_selfattention, c_self_sim_model
 from train_vit import evaluate_vit
-from train_align import evaluate_vit_align_one_epoch, log_train_val, log_eval
+from train_align import evaluate_vit_align_one_epoch, evaluate_datacos, log_eval
 from checkpoint import load_checkpoint
 
 
@@ -15,6 +15,7 @@ parser.add_argument("--csv_pref", type=str, default="pair")
 parser.add_argument("--exp_name", type=str, default="hpcp_attn_v10", help="name of training experiment")
 parser.add_argument("--cache_dir", type=str, default="cache", help="cache directory name")
 parser.add_argument("--rep", type=str, default="hpcp", help="representation of the input")
+parser.add_argument("--check_name", type=str, default="last.pt", help="name of checkpoint")
 args = parser.parse_args()
 
 # data path
@@ -72,7 +73,8 @@ optimizer = torch.optim.AdamW(
 
 best_loss = float("inf")
 
-checkpoint_path = checkpoint_dir / "last.pt"
+checkpoint_path = checkpoint_dir / args.check_name
+# checkpoint_path = checkpoint_dir / "last.pt"
 # checkpoint_path = checkpoint_dir / "best.pt"
 
 
@@ -197,12 +199,10 @@ print(
 )
 
 # Evaluation on datacos dataset pair
-datacos_test_metrics = evaluate_vit_align_one_epoch(
+datacos_test_metrics = evaluate_datacos(
     model=model,
     dataloader=datacos_loader,
     device=device,
-    glo_margin=0.2,
-    loc_margin=0.2,
     top_k=10
 )
 

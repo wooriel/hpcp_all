@@ -483,6 +483,255 @@ def evaluate_vit_moco(model, dataloader, device):
     }
 
 
+@torch.no_grad()
+def evaluate_moco_datacos(model, dataloader, device, top_k=10):
+    model.eval()
+
+    total_loss = 0.0
+    total_samples = 0
+
+    all_query_pred = []
+    all_key_feature = []
+    all_work_ids = []
+    all_perf_ids = []
+
+    progress_bar = tqdm(dataloader, desc="Evaluation", leave=False)
+
+    for batch in progress_bar:
+        x1_work_id = batch["src_work_id"].to(device)
+        x2_work_id = batch["pos_work_id"].to(device)
+
+        x1_perf_id = batch["src_label"].to(device)
+        x2_perf_id = batch["pos_label"].to(device)
+
+        x1 = batch["orig_inp"].to(device)
+        x2 = batch["pos_inp"].to(device)
+
+        output = model(x1, x2)
+
+        # [2B, D]
+        query_pred = torch.cat(
+            [output["x1_query_pred"], output["x2_query_pred"]],
+            dim=0,
+        )
+
+        key_feature = torch.cat(
+            [output["x1_key_feature"], output["x2_key_feature"]],
+            dim=0,
+        )
+
+        # [2B]
+        work_ids = torch.cat(
+            [x1_work_id, x2_work_id],
+            dim=0,
+        )
+
+        perf_ids = torch.cat(
+            [x1_perf_id, x2_perf_id],
+            dim=0,
+        )
+
+        # --------------------------------------------------
+        # Loss is still calculated per batch
+        # --------------------------------------------------
+        query_pred_norm = F.normalize(query_pred, dim=-1)
+        key_feature_norm = F.normalize(key_feature, dim=-1)
+
+        loss = supervised_moco_loss(
+            q=query_pred_norm,
+            k=key_feature_norm,
+            work_ids=work_ids,
+            perf_ids=perf_ids,
+            temperature=0.2,
+        )
+
+        batch_size = work_ids.size(0)
+
+        total_loss += loss.item() * batch_size
+        total_samples += batch_size
+
+        # --------------------------------------------------
+        # Only collect embeddings / IDs here
+        # --------------------------------------------------
+        all_query_pred.append(query_pred.detach().cpu())
+        all_key_feature.append(key_feature.detach().cpu())
+
+        all_work_ids.extend(work_ids.detach().cpu().tolist())
+        all_perf_ids.extend(perf_ids.detach().cpu().tolist())
+
+    # ======================================================
+    # WHOLE Da-TACOS DATASET
+    # ======================================================
+
+    all_query_pred = torch.cat(all_query_pred, dim=0)
+    all_key_feature = torch.cat(all_key_feature, dim=0)
+
+    # ------------------------------------------------------
+    # Remove duplicate performances caused by pair dataset
+    # ------------------------------------------------------
+    unique_query = []
+    unique_key = []
+    unique_work_ids = []
+    unique_perf_ids = []
+
+    seen_perf_ids = set()
+
+    for i, perf_id in enumerate(all_perf_ids):
+        if perf_id in seen_perf_ids:
+            continue
+
+        seen_perf_ids.add(perf_id)
+
+        unique_query.append(all_query_pred[i])
+        unique_key.append(all_key_feature[i])
+
+        unique_work_ids.append(all_work_ids[i])
+        unique_perf_ids.append(perf_id)
+
+    query_pred = torch.stack(unique_query, dim=0).to(device)
+    key_feature = torch.stack(unique_key, dim=0).to(device)
+
+    work_ids = torch.tensor(
+        unique_work_ids,
+        device=device,
+    )
+
+    perf_ids = torch.tensor(
+        unique_perf_ids,
+        device=device,
+    )
+
+    print(
+        "Da-TACOS retrieval:",
+        len(all_perf_ids),
+        "samples ->",
+        len(unique_perf_ids),
+        "unique performances",
+    )
+
+    # ======================================================
+    # Normalize once
+    # ======================================================
+
+    query_pred = F.normalize(query_pred, dim=-1)
+    key_feature = F.normalize(key_feature, dim=-1)
+
+    # [N, N]
+    sim_matrix = query_pred @ key_feature.T
+
+    # ======================================================
+    # Global masks
+    # ======================================================
+
+    same_work = (
+        work_ids[:, None]
+        ==
+        work_ids[None, :]
+    )
+
+    same_perf = (
+        perf_ids[:, None]
+        ==
+        perf_ids[None, :]
+    ) & same_work
+
+    # Same work, different performance
+    positive_mask = same_work & ~same_perf
+
+    # Different work
+    negative_mask = ~same_work
+
+    # Everything except exact same performance
+    candidate_mask = ~same_perf
+
+    # ======================================================
+    # Positive / negative similarity statistics
+    # ======================================================
+
+    pos = sim_matrix[positive_mask]
+    neg = sim_matrix[negative_mask]
+
+    pos_mean = pos.mean().item()
+    neg_mean = neg.mean().item()
+
+    pos_std = (
+        pos.std().item()
+        if pos.numel() > 1
+        else float("nan")
+    )
+
+    neg_std = (
+        neg.std().item()
+        if neg.numel() > 1
+        else float("nan")
+    )
+
+    # ======================================================
+    # Global retrieval matrix
+    # ======================================================
+
+    retrieval_sim = sim_matrix.masked_fill(
+        ~candidate_mask,
+        float("-inf"),
+    )
+
+    # Top-1 calculated once
+    pred = retrieval_sim.argmax(dim=1)
+    row_idx = torch.arange(retrieval_sim.size(0), device=device)
+    moco_top1 = positive_mask[row_idx, pred].float().mean().item()
+
+    # Top-k calculated once
+    k = min(top_k, retrieval_sim.size(1))
+    topk_idx = retrieval_sim.topk(k=k, dim=1).indices
+    topk_positive = torch.gather(positive_mask, 1, topk_idx)
+    moco_topk = topk_positive.any(dim=1).float().mean().item()
+
+    # MRR / MAP calculated once
+    mrr_score, map_score = get_moco_mrr(
+        retrieval_sim,
+        positive_mask,
+    )
+
+    if torch.is_tensor(mrr_score):
+        mrr_score = mrr_score.item()
+
+    if torch.is_tensor(map_score):
+        map_score = map_score.item()
+
+    # AUC calculated once
+    auc_scores = sim_matrix[
+        candidate_mask
+    ]
+
+    auc_labels = positive_mask[
+        candidate_mask
+    ].long()
+
+    auc = roc_auc_score(
+        auc_labels.cpu().numpy(),
+        auc_scores.cpu().numpy(),
+    )
+
+    return {
+        "loss": total_loss / total_samples,
+
+        "positive_mean": pos_mean,
+        "negative_mean": neg_mean,
+
+        "gap": pos_mean - neg_mean,
+
+        "positive_std": pos_std,
+        "negative_std": neg_std,
+
+        "auc": auc,
+
+        "mrr": mrr_score,
+        "map": map_score,
+        "top1": moco_top1,
+        "topk": moco_topk,
+    }
+
+
 def log_train_val(log_path, epoch, train_metrics, val_metrics):
     log_line = (
         "Epoch {:03d} | "

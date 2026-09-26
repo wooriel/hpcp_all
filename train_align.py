@@ -1,5 +1,5 @@
 from tqdm import tqdm
-from models.f_losses import triplet_loss, retrieval_loss, retrieval_metrics_val, best_diagonal_window, smooth_ap_loss
+from models.f_losses import triplet_loss, retrieval_metrics_val, best_diagonal_window, smooth_ap_loss, retrieval_metrics_datacos
 import torch
 import torch.nn.functional as F
 from sklearn.metrics import roc_auc_score
@@ -492,6 +492,208 @@ def evaluate_vit_align_one_epoch(model, dataloader, device, glo_margin=0.2, loc_
         "map": ret_metrics["map"],
         "top1" : ret_metrics["top1"],
         "topk": ret_metrics["topk"],
+    }
+
+@torch.no_grad()
+@torch.no_grad()
+def evaluate_datacos(model, dataloader, device, glo_margin=0.2, loc_margin=0.2, top_k=10):
+    model.eval()
+
+    total_loss = 0.0
+    total_samples = 0
+
+    lambda_tri = 1.0
+    lambda_ap = 0.03
+    lambda_local = 1.0
+
+    all_pos_sim = []
+    all_neg_sim = []
+
+    all_embeddings = []
+    all_work_ids = []
+    all_perf_ids = []
+
+    total_tri = 0.0
+    total_ret = 0.0
+    total_loc = 0.0
+
+    progress_bar = tqdm(dataloader, desc="Validation", leave=False)
+
+    for batch in progress_bar:
+        anchor_work_id = batch["src_work_id"].to(device)
+        pos_work_id = batch["pos_work_id"].to(device)
+        neg_work_id = batch["neg_work_id"].to(device)
+
+        anchor_perf_id = batch["src_label"].to(device)
+        pos_perf_id = batch["pos_label"].to(device)
+        neg_perf_id = batch["neg_label"].to(device)
+
+        anchor = batch["orig_inp"].to(device)
+        positive = batch["pos_inp"].to(device)
+        negative = batch["neg_inp"].to(device)
+
+        outputp = model(anchor, positive)
+        outputn = model(anchor, negative)
+
+        anchor_feature = outputp["src_feature"]
+        pos_feature = outputp["tgt_feature"]
+        neg_feature = outputn["tgt_feature"]
+
+        pos_pair_sim = outputp["pair_similarity"]
+        neg_pair_sim = outputn["pair_similarity"]
+
+        cos_pos = F.cosine_similarity(anchor_feature, pos_feature, dim=-1)
+        cos_neg = F.cosine_similarity(anchor_feature, neg_feature, dim=-1)
+
+        tri_loss = triplet_loss(
+            cos_pos=cos_pos,
+            cos_neg=cos_neg,
+            margin=glo_margin,
+        )
+
+        embeddings = torch.cat(
+            [anchor_feature, pos_feature, neg_feature],
+            dim=0,
+        )
+
+        work_ids = torch.cat(
+            [anchor_work_id, pos_work_id, neg_work_id],
+            dim=0,
+        )
+
+        ap_loss = smooth_ap_loss(
+            embeddings,
+            work_ids,
+            temperature=0.1,
+        )
+
+        global_loss = lambda_tri * tri_loss + lambda_ap * ap_loss
+
+        pos_local_score, _, _ = best_diagonal_window(
+            pos_pair_sim,
+            window=40,
+        )
+
+        neg_local_score, _, _ = best_diagonal_window(
+            neg_pair_sim,
+            window=40,
+        )
+
+        local_loss = F.relu(
+            neg_local_score - pos_local_score + loc_margin
+        ).mean()
+
+        loss = global_loss + lambda_local * local_loss
+
+        batch_size = anchor.size(0)
+
+        total_loss += loss.item() * batch_size
+        total_samples += batch_size
+
+        total_tri += tri_loss.item() * batch_size
+        total_ret += ap_loss.item() * batch_size
+        total_loc += local_loss.item() * batch_size
+
+        # --------------------------------------------------
+        # only collect values here
+        # --------------------------------------------------
+
+        all_pos_sim.append(cos_pos.detach().cpu())
+        all_neg_sim.append(cos_neg.detach().cpu())
+
+        all_embeddings.append(anchor_feature.detach().cpu())
+        all_embeddings.append(pos_feature.detach().cpu())
+
+        all_work_ids.extend(batch["src_work_id"].cpu().tolist())
+        all_work_ids.extend(batch["pos_work_id"].cpu().tolist())
+
+        all_perf_ids.extend(batch["src_label"].cpu().tolist())
+        all_perf_ids.extend(batch["pos_label"].cpu().tolist())
+
+    # ======================================================
+    # ALL METRICS CALCULATED ONCE HERE
+    # ======================================================
+
+    # ---------- pairwise metrics ----------
+    pos_sim = torch.cat(all_pos_sim, dim=0)
+    neg_sim = torch.cat(all_neg_sim, dim=0)
+
+    pos_mean = pos_sim.mean().item()
+    neg_mean = neg_sim.mean().item()
+
+    pos_std = pos_sim.std().item() if len(pos_sim) > 1 else float("nan")
+    neg_std = neg_sim.std().item() if len(neg_sim) > 1 else float("nan")
+
+    scores = torch.cat([
+        pos_sim,
+        neg_sim,
+    ]).numpy()
+
+    labels = torch.cat([
+        torch.ones_like(pos_sim),
+        torch.zeros_like(neg_sim),
+    ]).numpy()
+
+    roc_auc = roc_auc_score(labels, scores,)
+
+    triplet_acc = (pos_sim > neg_sim).float().mean().item()
+    margin_acc = (pos_sim >= neg_sim + glo_margin).float().mean().item()
+
+    # ---------- retrieval database ----------
+    all_embeddings = torch.cat(
+        all_embeddings,
+        dim=0,
+    )
+
+    unique_embeddings = []
+    unique_work_ids = []
+    unique_perf_ids = []
+
+    seen_perf_ids = set()
+
+    for i, perf_id in enumerate(all_perf_ids):
+        if perf_id in seen_perf_ids:
+            continue
+
+        seen_perf_ids.add(perf_id)
+        unique_embeddings.append(all_embeddings[i])
+        unique_work_ids.append(all_work_ids[i])
+        unique_perf_ids.append(perf_id)
+
+    unique_embeddings = torch.stack(unique_embeddings, dim=0,)
+
+    # ---------- retrieval metrics ----------
+    ret_metrics = retrieval_metrics_val(
+        unique_embeddings,
+        unique_work_ids,
+        unique_perf_ids,
+        top_k=top_k,
+    )
+
+    return {
+        "loss": total_loss / total_samples,
+
+        "positive_cosine_mean": pos_mean,
+        "negative_cosine_mean": neg_mean,
+
+        "cosine_gap": pos_mean - neg_mean,
+
+        "positive_cosine_std": pos_std,
+        "negative_cosine_std": neg_std,
+
+        "roc_auc": roc_auc,
+
+        "mrr": ret_metrics["mrr"],
+        "map": ret_metrics["map"],
+        "top1": ret_metrics["top1"],
+        "topk": ret_metrics["topk"],
+
+        "triplet_acc": triplet_acc,
+        "margin_acc": margin_acc,
+
+        "tri_loss": total_tri / total_samples,
+        "ap_loss": total_ret / total_samples,
+        "local_loss": total_loc / total_samples,
     }
 
 

@@ -1023,3 +1023,75 @@ def retrieval_metrics_from_scores(
         "top1": top1.item(),
         "topk": topk.item(),
     }
+
+
+def retrieval_metrics_datacos(embeddings, work_ids, perf_ids, top_k=10):
+    embeddings = F.normalize(embeddings, p=2, dim=-1)
+
+    work_ids = torch.as_tensor(work_ids)
+    perf_ids = torch.as_tensor(perf_ids)
+
+    # [N, N]
+    sim = embeddings @ embeddings.T
+
+    # same musical work
+    positive_mask = work_ids[:, None] == work_ids[None, :]
+
+    # same exact recording / performance
+    self_mask = perf_ids[:, None] == perf_ids[None, :]
+
+    # self should not count as a positive
+    positive_mask = positive_mask & ~self_mask
+
+    # prevent self from being retrieved
+    sim = sim.masked_fill(self_mask, float("-inf"))
+
+    # Ignore queries that have no other version
+    valid = positive_mask.any(dim=1)
+
+    sim = sim[valid]
+    positive_mask = positive_mask[valid]
+
+    # Rank the entire database
+    order = sim.argsort(dim=1, descending=True)
+    ranked_positive = torch.gather(positive_mask, 1, order)
+
+    # Top-1
+    top1 = ranked_positive[:, 0].float().mean().item()
+
+    # Top-k
+    k = min(top_k, ranked_positive.shape[1])
+    topk = ranked_positive[:, :k].any(dim=1).float().mean().item()
+
+    # MRR
+    ranks = torch.arange(
+        1,
+        ranked_positive.shape[1] + 1,
+        dtype=torch.float32,
+        device=ranked_positive.device,
+    )
+
+    reciprocal_rank = (
+        ranked_positive.float() / ranks
+    ).max(dim=1).values
+
+    mrr = reciprocal_rank.mean().item()
+
+    # MAP
+    cumulative_hits = ranked_positive.float().cumsum(dim=1)
+    precision_at_k = cumulative_hits / ranks
+
+    num_positives = positive_mask.sum(dim=1)
+
+    ap = (
+        precision_at_k * ranked_positive.float()
+    ).sum(dim=1) / num_positives
+
+    map_score = ap.mean().item()
+
+    return {
+        "mrr": mrr,
+        "map": map_score,
+        "top1": top1,
+        "topk": topk,
+    }

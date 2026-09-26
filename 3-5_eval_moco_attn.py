@@ -5,7 +5,7 @@ import torch
 from dataset import cs_cover80dataset, cs_shsdataset, ci_copyright40dataset, ci_mcicdataset, pndatacosdataset
 from torch.utils.data import DataLoader
 from models import a_vittokenizer, b_selfattention, d_projector
-from train_moco import evaluate_vit_moco_pn, evaluate_vit_moco, log_eval_loc, log_eval
+from train_moco import evaluate_vit_moco_pn, evaluate_vit_moco, evaluate_moco_datacos, log_eval_loc, log_eval
 from checkpoint import load_checkpoint
 
 
@@ -14,6 +14,7 @@ parser.add_argument("--csv_pref", type=str, default="pair")
 parser.add_argument("--exp_name", type=str, default="moco_attn_v9", help="name of training experiment")
 parser.add_argument("--cache_dir", type=str, default="cache", help="cache directory name")
 parser.add_argument("--rep", type=str, default="hpcp", help="representation of the input")
+parser.add_argument("--check_name", type=str, default="last.pt", help="name of checkpoint")
 args = parser.parse_args()
 
 # data path
@@ -72,9 +73,9 @@ optimizer = torch.optim.AdamW(
 
 best_loss = float("inf")
 
+checkpoint_path = checkpoint_dir / args.check_name
 # checkpoint_path = checkpoint_dir / "last.pt"
 # checkpoint_path = checkpoint_dir / "best.pt"
-checkpoint_path = checkpoint_dir / "model_epoch_005.pt"
 
 
 if checkpoint_path.is_file():
@@ -202,14 +203,14 @@ print(
 )
 
 # Evaluation on datacos dataset pair
-datacos_test_metrics = evaluate_vit_moco_pn(
+datacos_test_metrics = evaluate_moco_datacos(
     model=model,
     dataloader=datacos_loader,
     device=device,
 )
 
 test_dataset = "datacos"
-log_eval_loc(log_path=log_path, dataset_name=test_dataset, metrics=datacos_test_metrics)
+log_eval(log_path=log_path, dataset_name=test_dataset, metrics=datacos_test_metrics)
 
 print(
     f": {datacos_test_metrics['loss']:.4f} | "
